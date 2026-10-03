@@ -17,11 +17,11 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
 
+// Mapeo de rutas para MVC y WebSockets
+app.MapHub<TelemetriaHub>("/telemetriaHub");
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
-
-app.MapHub<TelemetriaHub>("/telemetriaHub"); // Ruta para WebSockets
 
 // Crear la base de datos automáticamente al iniciar si no existe
 using (var scope = app.Services.CreateScope())

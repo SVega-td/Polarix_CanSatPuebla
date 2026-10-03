@@ -80,11 +80,12 @@ function toScientific(value) {
 }
 
 function formatTime(seconds) {
+    if (seconds === undefined || seconds === null) return '--';
     return seconds.toFixed(2);
 }
 
 function formatGPS(lat, lon) {
-    if (lat === undefined || lon === undefined) return '--';
+    if (lat === undefined || lon === undefined || lat === null || lon === null) return '--';
     return lat.toFixed(6) + ', ' + lon.toFixed(6);
 }
 
@@ -97,7 +98,6 @@ function getStatusIcon(value, threshold) {
 //  ACTUALIZAR INTERFAZ
 // ============================================================
 function updateDashboard(data) {
-    // Actualizar métricas
     document.getElementById('tempValue').textContent = data.temp?.toFixed(2) ?? '--';
     document.getElementById('tempSci').textContent = toScientific(data.temp);
 
@@ -121,7 +121,6 @@ function updateDashboard(data) {
 
     document.getElementById('gpsValue').textContent = formatGPS(data.lat, data.lon);
 
-    // Actualizar contador y timestamp
     document.getElementById('packetCounter').innerHTML = `<strong>Paquetes:</strong> ${packetCount}`;
     document.getElementById('lastUpdate').innerHTML = `<strong>Última:</strong> ${new Date().toLocaleTimeString()}`;
 }
@@ -134,22 +133,21 @@ function updateTable(data) {
     const status = (data.alt > 50) ? '🟢 Descenso' : (data.alt > 10 ? '🟡 Apertura' : '🔴 Aterrizaje');
 
     row.innerHTML = `
-                <td>${idx}</td>
-                <td>${formatTime(data.time)}</td>
-                <td>${data.alt?.toFixed(2) ?? '--'}</td>
-                <td>${data.temp?.toFixed(2) ?? '--'}</td>
-                <td>${data.hum?.toFixed(2) ?? '--'}</td>
-                <td>${data.pressure?.toFixed(2) ?? '--'}</td>
-                <td>${data.speed?.toFixed(2) ?? '--'}</td>
-                <td>${data.accel?.toFixed(2) ?? '--'}</td>
-                <td>${data.vib?.toFixed(2) ?? '--'}</td>
-                <td style="font-size:11px;">${formatGPS(data.lat, data.lon)}</td>
-                <td>${status}</td>
-            `;
+        <td>${idx}</td>
+        <td>${formatTime(data.time)}</td>
+        <td>${data.alt?.toFixed(2) ?? '--'}</td>
+        <td>${data.temp?.toFixed(2) ?? '--'}</td>
+        <td>${data.hum?.toFixed(2) ?? '--'}</td>
+        <td>${data.pressure?.toFixed(2) ?? '--'}</td>
+        <td>${data.speed?.toFixed(2) ?? '--'}</td>
+        <td>${data.accel?.toFixed(2) ?? '--'}</td>
+        <td>${data.vib?.toFixed(2) ?? '--'}</td>
+        <td style="font-size:11px;">${formatGPS(data.lat, data.lon)}</td>
+        <td>${status}</td>
+    `;
 
     tbody.prepend(row);
 
-    // Limitar filas
     while (tbody.children.length > MAX_DATA_POINTS) {
         tbody.removeChild(tbody.lastChild);
     }
@@ -158,7 +156,7 @@ function updateTable(data) {
 }
 
 function updateCharts(data) {
-    const timeLabel = data.time.toFixed(2);
+    const timeLabel = data.time ? data.time.toFixed(2) : "0.00";
 
     // Altitud
     altChart.data.labels.push(timeLabel);
@@ -203,7 +201,6 @@ function updateCharts(data) {
 function processData(data) {
     packetCount++;
 
-    // Asignar tiempo si no viene
     if (!data.time) {
         data.time = dataHistory.length > 0 ?
             dataHistory[dataHistory.length - 1].time + 0.1 :
@@ -219,180 +216,60 @@ function processData(data) {
     updateTable(data);
     updateCharts(data);
 
-    // Actualizar LED de conexión
     if (!isConnected) {
         isConnected = true;
         document.getElementById('statusLed').className = 'led';
         document.getElementById('connectionStatus').textContent = '🟢 Conectado';
+        document.getElementById('connectionStatus').style.color = '#00ff00';
     }
 }
 
 // ============================================================
-//  SIMULADOR DE DATOS (para pruebas sin ESP32)
+//  CONEXIÓN CON SIGNALR (ACTIVA PARA EL BACKEND EN C#)
 // ============================================================
-function generateSimulatedData() {
-    const last = dataHistory.length > 0 ? dataHistory[dataHistory.length - 1] : null;
-    const time = last ? last.time + 0.5 : 0;
-
-    // Simular trayectoria de un CANSAT
-    const baseAlt = 100 - (time * 0.5); // descenso
-    const alt = Math.max(0, baseAlt + (Math.random() - 0.5) * 2);
-
-    const temp = 23 + Math.sin(time * 0.1) * 2 + (Math.random() - 0.5) * 1.5;
-    const hum = 60 + Math.sin(time * 0.05) * 10 + (Math.random() - 0.5) * 5;
-    const pressure = 1016 - (100 - alt) * 12 + (Math.random() - 0.5) * 50;
-    const speed = Math.max(0, (100 - alt) * 0.08 + (Math.random() - 0.5) * 1.5);
-    const accel = 9.8 + (Math.random() - 0.5) * 2;
-    const vib = Math.random() * 2 + Math.sin(time * 0.5) * 0.5;
-
-    const lat = 25.869 + (Math.random() - 0.5) * 0.005;
-    const lon = -97.5027 + (Math.random() - 0.5) * 0.005;
-
-    return {
-        time,
-        alt,
-        temp,
-        hum,
-        pressure,
-        speed,
-        accel,
-        vib,
-        lat,
-        lon
-    };
-}
-
-// ============================================================
-//  CONEXIÓN CON ESP32 (WebSocket o Fetch)
-// ============================================================
-//  OPCIÓN 1: WebSocket (recomendado para tiempo real)
-// ============================================================
-function connectWebSocket() {
-    const wsUrl = 'ws://localhost:8080'; // Cambia al IP de tu ESP32
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-        console.log('✅ WebSocket conectado');
-        isConnected = true;
-        document.getElementById('statusLed').className = 'led';
-        document.getElementById('connectionStatus').textContent = '🟢 Conectado';
-    };
-
-    ws.onmessage = (event) => {
-        try {
-            const raw = event.data;
-            // Esperamos que el ESP32 envíe JSON
-            const data = JSON.parse(raw);
-            processData(data);
-        } catch (e) {
-            // Si no es JSON, intentar parsear como CSV o texto
-            console.warn('Dato no JSON:', event.data);
-            // Puedes agregar lógica para parsear otros formatos
-        }
-    };
-
-    ws.onclose = () => {
-        console.warn('⚠️ WebSocket desconectado');
-        isConnected = false;
-        document.getElementById('statusLed').className = 'led disconnected';
-        document.getElementById('connectionStatus').textContent = '🔴 Desconectado';
-        // Reconectar después de 3s
-        setTimeout(connectWebSocket, 3000);
-    };
-
-    ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
-    };
-
-    return ws;
-}
-
-// ============================================================
-//  OPCIÓN 2: Fetch (HTTP polling) — más simple
-// ============================================================
-let pollingInterval = null;
-
-function startPolling() {
-    const url = 'http://localhost:8080/data'; // Cambia al endpoint de tu ESP32
-    // Si tu ESP32 sirve datos en JSON
-
-    if (pollingInterval) clearInterval(pollingInterval);
-
-    pollingInterval = setInterval(async () => {
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('HTTP error');
-            const data = await response.json();
-            processData(data);
-        } catch (err) {
-            // Si falla, probar con simulación o mostrar error
-            console.warn('Polling falló, usando simulación:', err.message);
-            // Descomentar para usar simulación automática:
-            // const simData = generateSimulatedData();
-            // processData(simData);
-
-            // Mostrar desconectado si falla varias veces
-            if (!isConnected) {
-                document.getElementById('statusLed').className = 'led disconnected';
-                document.getElementById('connectionStatus').textContent = '🔴 Sin datos';
-            }
-        }
-    }, 200); // cada 200ms
-}
-
-// ============================================================
-//  OPCIÓN 3: SIMULACIÓN (para pruebas sin hardware)
-// ============================================================
-let simInterval = null;
-
-function startSimulation() {
-    if (simInterval) clearInterval(simInterval);
-    // Generar 2 datos por segundo
-    simInterval = setInterval(() => {
-        const data = generateSimulatedData();
-        processData(data);
-    }, 300);
-}
-
-
-//  INICIALIZACIÓN
 const connection = new signalR.HubConnectionBuilder()
-    .withUrl("/telemetriaHub")
+    .withUrl("/telemetriaHub") // Debe coincidir con Program.cs
     .withAutomaticReconnect()
     .build();
 
-connection.on("ActualizarDashboard", function (data) {
-    // Mapear el JSON de C# a la estructura que ya usan tus funciones
+// Escuchar el evento que envía el TelemetriaController.cs
+connection.on("RecibirTelemetria", function (data) {
+    console.log("Paquete recibido:", data);
+
+    // Mapear el JSON recibido de C# a la estructura que usan tus funciones JS.
+    // Soporta tanto nombres en español (si tu clase C# los tiene así) como en inglés.
     const datosMapeados = {
-        time: data.tiempo,
-        alt: data.altitud,
-        temp: data.temperatura,
-        hum: data.humedad,
-        pressure: data.presion,
-        speed: data.velocidad,
-        accel: data.aceleracion,
-        vib: data.vibracion,
-        lat: data.latitud,
-        lon: data.longitud
+        time: data.tiempo ?? data.time,
+        alt: data.altitud ?? data.alt,
+        temp: data.temperatura ?? data.temp,
+        hum: data.humedad ?? data.hum,
+        pressure: data.presion ?? data.pressure,
+        speed: data.velocidad ?? data.speed,
+        accel: data.aceleracion ?? data.accel,
+        vib: data.vibracion ?? data.vib,
+        lat: data.latitud ?? data.lat,
+        lon: data.longitud ?? data.lon
     };
+
     processData(datosMapeados);
 });
 
 async function startSignalR() {
     try {
         await connection.start();
-        console.log("Conectado al servidor de Telemetría ASPIRAL");
+        console.log(" Conectado al servidor de Telemetría ASPIRAL");
         isConnected = true;
         document.getElementById('statusLed').className = 'led';
         document.getElementById('connectionStatus').textContent = '🟢 Conectado';
+        document.getElementById('connectionStatus').style.color = '#00ff00';
     } catch (err) {
-        console.error("Error conectando a SignalR: ", err);
-        setTimeout(startSignalR, 5000);
+        console.error(" Error conectando a SignalR: ", err);
+        document.getElementById('statusLed').className = 'led disconnected';
+        document.getElementById('connectionStatus').textContent = '🔴 Desconectado';
+        document.getElementById('connectionStatus').style.color = 'red';
+        setTimeout(startSignalR, 5000); // Reintentar en 5 segundos
     }
 }
 
-// Iniciar conexión al cargar
+// Iniciar conexión al cargar el script
 startSignalR();
-
-// Ejecutar al cargar la página
-init();

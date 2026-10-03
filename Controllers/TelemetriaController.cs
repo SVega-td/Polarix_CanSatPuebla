@@ -1,35 +1,32 @@
-﻿using CanSat_Tecnm.Data;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using CanSat_Tecnm.Hubs;
 using CanSat_Tecnm.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
+using System.Threading.Tasks;
 
 namespace CanSat_Tecnm.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class TelemetriaController : ControllerBase
+    public class TelemetriaController : Controller
     {
-        private readonly ApplicationDbContext _context;
         private readonly IHubContext<TelemetriaHub> _hubContext;
 
-        public TelemetriaController(ApplicationDbContext context, IHubContext<TelemetriaHub> hubContext)
+        // Inyectamos el Hub para poder enviar datos a la vista de MVC de forma instantánea
+        public TelemetriaController(IHubContext<TelemetriaHub> hubContext)
         {
-            _context = context;
             _hubContext = hubContext;
         }
 
         [HttpPost]
         public async Task<IActionResult> RecibirDatos([FromBody] Telemetria datos)
         {
-            // 1. Guardar en SQLite para el reporte PFR
-            _context.RegistrosTelemetria.Add(datos);
-            await _context.SaveChangesAsync();
+            // Opcional: Aquí puedes agregar el código para guardar en 'ApplicationDbContext' si deseas mantener un registro histórico
 
-            // 2. Enviar a la Vista de Matamoros al instante
-            await _hubContext.Clients.All.SendAsync("ActualizarDashboard", datos);
+            // Transmitir los datos a todos los clientes web conectados bajo el evento "RecibirTelemetria"
+            await _hubContext.Clients.All.SendAsync("RecibirTelemetria", datos);
 
-            return Ok(new { status = "recibido" });
+            return Ok(new { status = "success" });
         }
     }
 }
